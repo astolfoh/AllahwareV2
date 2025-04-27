@@ -83,8 +83,16 @@ local function PerformChecks(player, character, isSelecting)
         end
     end
 
+    if checks['KnifeCheck'] then
+        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if tool and tool.Name == "[Knife]" then
+            return false
+        end
+    end
+
     return true
 end
+
 
 --// Target System
 local function GetClosestPlayer()
@@ -181,7 +189,11 @@ end
 --// Delay System
 local function CanShoot()
     if not Config['Triggerbot']['Delay']['Enabled'] then
-        return true -- fire every frame if delay disabled
+        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if tool and tool.Name == "[Knife]" then
+            return false
+        end
+        return true
     end
 
     local now = tick()
@@ -190,12 +202,17 @@ local function CanShoot()
     local delay = math_random() * (max - min) + min
 
     if now - LastShotTime >= delay then
+        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if tool and tool.Name == "[Knife]" then
+            return false
+        end
         LastShotTime = now
         return true
     end
 
     return false
 end
+
 
 
 --// Main Triggerbot Logic
