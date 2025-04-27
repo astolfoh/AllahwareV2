@@ -486,3 +486,184 @@ UserInputService.InputEnded:Connect(function(input, gpe)
         end
     end
 end)
+
+--- ESP
+
+
+--// ESP Internal Settings
+local ESPSettings = {
+    NameOffset = Vector3.new(0, 3, 0), -- Name above head
+    DistanceOffset = Vector3.new(0, -3, 0), -- Distance below feet
+    Font = 2, -- Plex font
+    Size = 13, -- Text size
+    TracerThickness = 1, -- Tracer line thickness
+    TracerFromMouse = true, -- true = From mouse, false = From bottom center
+    TracerOffset = Vector2.new(0, 60),
+}
+
+--// ESP Folder
+local ESPFolder = Instance.new("Folder")
+ESPFolder.Name = "ESPFolder"
+ESPFolder.Parent = game:GetService("CoreGui")
+
+local ESPObjects = {}
+local ESPEnabled = Config['ESP']['Main']['Enabled']
+
+--// ESP Checks
+local function ESPChecks(player, character)
+    local checks = Config['ESP']['Main']['Checks']['Players']
+    if not checks then
+        return false
+    end
+
+    if checks['Knocked'] then
+        local bodyEffects = character:FindFirstChild("BodyEffects")
+        local ko = bodyEffects and bodyEffects:FindFirstChild("K.O")
+        if ko and ko.Value then
+            return false
+        end
+    end
+
+    if checks['CrewCheck'] then
+        local localData = LocalPlayer:FindFirstChild("DataFolder")
+        local targetData = player:FindFirstChild("DataFolder")
+        if localData and targetData then
+            local localCrew = localData:FindFirstChild("Information") and localData.Information:FindFirstChild("Crew")
+            local targetCrew = targetData:FindFirstChild("Information") and targetData.Information:FindFirstChild("Crew")
+            if localCrew and targetCrew and localCrew.Value ~= "" and targetCrew.Value ~= "" then
+                if localCrew.Value == targetCrew.Value then
+                    return false
+                end
+            end
+        end
+    end
+
+    return true
+end
+
+--// ESP Create
+local function CreateESPObject(player)
+    if ESPObjects[player] then
+        ESPObjects[player]['NameLabel']:Destroy()
+        ESPObjects[player]['DistanceLabel']:Destroy()
+        ESPObjects[player]['Tracer']:Destroy()
+    end
+
+    local nameLabel = Drawing.new("Text")
+    nameLabel.Size = ESPSettings.Size
+    nameLabel.Font = ESPSettings.Font
+    nameLabel.Outline = true
+    nameLabel.Center = true
+    nameLabel.Color = Color3.new(1, 1, 1)
+    nameLabel.Visible = false
+
+    local distanceLabel = Drawing.new("Text")
+    distanceLabel.Size = ESPSettings.Size
+    distanceLabel.Font = ESPSettings.Font
+    distanceLabel.Outline = true
+    distanceLabel.Center = true
+    distanceLabel.Color = Color3.new(1, 1, 1)
+    distanceLabel.Visible = false
+
+    local tracer = Drawing.new("Line")
+    tracer.Thickness = ESPSettings.TracerThickness
+    tracer.Color = Color3.new(1, 1, 1)
+    tracer.Visible = false
+
+    ESPObjects[player] = {
+        ['NameLabel'] = nameLabel,
+        ['DistanceLabel'] = distanceLabel,
+        ['Tracer'] = tracer,
+    }
+end
+
+--// ESP Remove
+local function RemoveESPObject(player)
+    if ESPObjects[player] then
+        ESPObjects[player]['NameLabel']:Destroy()
+        ESPObjects[player]['DistanceLabel']:Destroy()
+        ESPObjects[player]['Tracer']:Destroy()
+        ESPObjects[player] = nil
+    end
+end
+
+Players.PlayerRemoving:Connect(function(player)
+    RemoveESPObject(player)
+end)
+
+--// ESP Keybind Toggle
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode[Config['ESP']['Main']['Bind']] then
+        ESPEnabled = not ESPEnabled
+    end
+end)
+
+--// ESP Render Update
+RunService.RenderStepped:Connect(function()
+    if not ESPEnabled then
+        for _, objects in pairs(ESPObjects) do
+            objects['NameLabel'].Visible = false
+            objects['DistanceLabel'].Visible = false
+            objects['Tracer'].Visible = false
+        end
+        return
+    end
+
+    local rawMousePos = Vector2.new(Mouse.X, Mouse.Y)
+    local mousePos = rawMousePos + ESPSettings.TracerOffset
+    local bottomCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            if not ESPObjects[player] then
+                CreateESPObject(player)
+            end
+
+            local objects = ESPObjects[player]
+            local character = player.Character
+            local root = character.HumanoidRootPart
+
+            local screenPos, onScreen = Camera:WorldToViewportPoint(root.Position)
+            local nameWorldPos = root.Position + ESPSettings.NameOffset
+            local distanceWorldPos = root.Position + ESPSettings.DistanceOffset
+
+            local nameScreenPos, nameOnScreen = Camera:WorldToViewportPoint(nameWorldPos)
+            local distanceScreenPos, distanceOnScreen = Camera:WorldToViewportPoint(distanceWorldPos)
+
+            if onScreen and ESPChecks(player, character) then
+                local distance = (Camera.CFrame.Position - root.Position).Magnitude
+
+                if Config['ESP']['Visuals']['Name'] then
+                    objects['NameLabel'].Position = Vector2.new(nameScreenPos.X, nameScreenPos.Y)
+                    objects['NameLabel'].Text = player.Name
+                    objects['NameLabel'].Visible = nameOnScreen
+                else
+                    objects['NameLabel'].Visible = false
+                end
+
+                if Config['ESP']['Visuals']['Distance'] then
+                    objects['DistanceLabel'].Position = Vector2.new(distanceScreenPos.X, distanceScreenPos.Y)
+                    objects['DistanceLabel'].Text = string.format("%.0f studs", distance)
+                    objects['DistanceLabel'].Visible = distanceOnScreen
+                else
+                    objects['DistanceLabel'].Visible = false
+                end
+
+                if Config['ESP']['Visuals']['Tracers'] then
+                    objects['Tracer'].From = ESPSettings.TracerFromMouse and mousePos or bottomCenter
+                    objects['Tracer'].To = Vector2.new(screenPos.X, screenPos.Y)
+                    objects['Tracer'].Visible = true
+                else
+                    objects['Tracer'].Visible = false
+                end
+            else
+                objects['NameLabel'].Visible = false
+                objects['DistanceLabel'].Visible = false
+                objects['Tracer'].Visible = false
+            end
+        elseif ESPObjects[player] then
+            RemoveESPObject(player)
+        end
+    end
+end)
