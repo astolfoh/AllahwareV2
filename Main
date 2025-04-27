@@ -43,8 +43,14 @@ end
 
 --// Perform Checks
 local function PerformChecks(player, character, isSelecting)
+    if not player or not character then
+        return false
+    end
+
     local checks = isSelecting and Config['Main']['Checks']['Selecting'] or Config['Main']['Checks']['Target']
-    if not checks then return false end
+    if not checks then
+        return false
+    end
 
     if checks['Knocked'] then
         local bodyEffects = character:FindFirstChild("BodyEffects")
@@ -55,7 +61,8 @@ local function PerformChecks(player, character, isSelecting)
     end
 
     if checks['SelfKnocked'] then
-        local selfBodyEffects = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("BodyEffects")
+        local selfCharacter = LocalPlayer.Character
+        local selfBodyEffects = selfCharacter and selfCharacter:FindFirstChild("BodyEffects")
         local selfKo = selfBodyEffects and selfBodyEffects:FindFirstChild("K.O")
         if selfKo and selfKo.Value then
             return false
@@ -83,16 +90,8 @@ local function PerformChecks(player, character, isSelecting)
         end
     end
 
-    if checks['KnifeCheck'] then
-        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-        if tool and tool.Name == "[Knife]" then
-            return false
-        end
-    end
-
     return true
 end
-
 
 --// Target System
 local function GetClosestPlayer()
@@ -124,10 +123,8 @@ local function ValidateTarget()
     if not CurrentTarget or not CurrentTarget.Character or not CurrentTarget.Character:FindFirstChild("HumanoidRootPart") then
         return false
     end
-    if not PerformChecks(CurrentTarget, CurrentTarget.Character, false) then
-        return false
-    end
-    return true
+
+    return PerformChecks(CurrentTarget, CurrentTarget.Character, false)
 end
 
 local function SelectTarget()
@@ -146,9 +143,6 @@ local function SelectTarget()
     end
 end
 
-
-
-
 local function UnselectTarget()
     if Config['Main']['Debug'] and CurrentTarget then
         print("[Triggerbot] Untargeted:", CurrentTarget.Name)
@@ -156,9 +150,13 @@ local function UnselectTarget()
     CurrentTarget = nil
 end
 
-
 --// Firing System
 local function FireTrigger()
+    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+    if tool and tool.Name == "[Knife]" then
+        return 
+    end
+
     if Config['Main']['Debug'] then
         print("[Triggerbot] Fired Shot")
     end
@@ -174,7 +172,6 @@ local function FireTrigger()
     end
 end
 
-
 --// Throttle System
 local function IsThrottled()
     local now = os_clock()
@@ -185,14 +182,9 @@ local function IsThrottled()
     return true
 end
 
-
 --// Delay System
 local function CanShoot()
     if not Config['Triggerbot']['Delay']['Enabled'] then
-        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-        if tool and tool.Name == "[Knife]" then
-            return false
-        end
         return true
     end
 
@@ -202,10 +194,6 @@ local function CanShoot()
     local delay = math_random() * (max - min) + min
 
     if now - LastShotTime >= delay then
-        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-        if tool and tool.Name == "[Knife]" then
-            return false
-        end
         LastShotTime = now
         return true
     end
@@ -213,10 +201,8 @@ local function CanShoot()
     return false
 end
 
-
-
 --// Main Triggerbot Logic
-    RunService.RenderStepped:Connect(function()
+       RunService.RenderStepped:Connect(function()
     if not Config['Main']['Enabled'] or not Config['Triggerbot']['Enabled'] then
         return
     end
@@ -229,23 +215,26 @@ end
         return
     end
 
+    if not CurrentTarget then
+        return
+    end
+
+    if not ValidateTarget() then
+        UnselectTarget()
+        return
+    end
+
     local targetPart = Mouse.Target
 
     if Config['Main']['TargetMode'] then
-        if CurrentTarget and ValidateTarget() then
-            local root = CurrentTarget.Character and CurrentTarget.Character:FindFirstChild("HumanoidRootPart")
-            if root then
-                if Mouse.Target and Mouse.Target:IsDescendantOf(CurrentTarget.Character) then
-                    if CanShoot() then
-                        FireTrigger()
-                    end
+        if CurrentTarget and CurrentTarget.Character and CurrentTarget.Character:FindFirstChild("HumanoidRootPart") then
+            if Mouse.Target and Mouse.Target:IsDescendantOf(CurrentTarget.Character) then
+                if CanShoot() then
+                    FireTrigger()
                 end
             end
-        else
-            UnselectTarget()
         end
     else
-        -- Free TargetMode = Shoot anyone in mouse crosshair
         if targetPart then
             local player = Players:GetPlayerFromCharacter(targetPart:FindFirstAncestorOfClass("Model"))
             if player and player ~= LocalPlayer and PerformChecks(player, player.Character, false) then
@@ -297,45 +286,50 @@ RunService.RenderStepped:Connect(function()
         return
     end
 
-    if not CurrentTarget or not ValidateTarget() then
+    if not CurrentTarget then
+        return
+    end
+
+    if not ValidateTarget() then
         UnselectTarget()
         return
     end
 
     local character = CurrentTarget and CurrentTarget.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then
-    UnselectTarget()
-    return
+        UnselectTarget()
+        return
     end
 
     if not PerformChecks(CurrentTarget, character, false) then
-    UnselectTarget()
-    return
+        UnselectTarget()
+        return
     end
 
     local isFirstPerson = (Camera.Focus.Position - Camera.CFrame.Position).Magnitude < 1
     if isFirstPerson and not Config['Camlock']['Toggle']['FirstPerson'] then
-    return
+        return
     end
     if not isFirstPerson and not Config['Camlock']['Toggle']['ThirdPerson'] then
-    return
+        return
     end
 
     local hitPart = character:FindFirstChild(Config['Camlock']['HitPart'])
     if not hitPart then
-    return
+        return
     end
+
     Camera.CFrame = ApplyCamlockSmoothing(hitPart.Position)
-    end)
+end)
+
+    
 
 
-    --HITBOX
+
+
 
 
 --// Hitbox Expander
-
-
-
 
 local HitboxAdornment = nil
 
@@ -460,6 +454,7 @@ OriginalRandom = hookfunction(math.random, function(...)
     return OriginalRandom(...)
 end)
 
+--// Bind Handling
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Enum.KeyCode[Config['Main']['Bind']] then
@@ -467,7 +462,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
             Holding = true
             CamlockHolding = true
             Config['SpreadModifier']['Enabled'] = true
-            ExpanderActive = true -- <-- New line
+            ExpanderActive = true
 
             if Config['Main']['TargetMode'] and not CurrentTarget then
                 SelectTarget()
@@ -477,13 +472,11 @@ UserInputService.InputBegan:Connect(function(input, gpe)
             Holding = not Holding
             CamlockEnabled = not CamlockEnabled
             Config['SpreadModifier']['Enabled'] = CamlockEnabled
-            ExpanderActive = CamlockEnabled -- <-- New line
+            ExpanderActive = CamlockEnabled
 
-            if Holding then
-                if Config['Main']['TargetMode'] and not CurrentTarget then
-                    SelectTarget()
-                end
-            else
+            if Holding and Config['Main']['TargetMode'] and not CurrentTarget then
+                SelectTarget()
+            elseif not Holding then
                 UnselectTarget()
             end
         end
@@ -497,7 +490,7 @@ UserInputService.InputEnded:Connect(function(input, gpe)
             Holding = false
             CamlockHolding = false
             Config['SpreadModifier']['Enabled'] = false
-            ExpanderActive = false -- <-- New line
+            ExpanderActive = false
             UnselectTarget()
         end
     end
