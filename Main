@@ -322,13 +322,6 @@ RunService.RenderStepped:Connect(function()
     Camera.CFrame = ApplyCamlockSmoothing(hitPart.Position)
 end)
 
-    
-
-
-
-
-
-
 --// Hitbox Expander
 
 local HitboxAdornment = nil
@@ -414,8 +407,6 @@ RunService.RenderStepped:Connect(function()
         end
     end
 end)
-
-
 
     --// Spread Modifier Hook
 local function GetWeaponSpreadReduction(weaponName)
